@@ -58,6 +58,19 @@ namespace ipcgull {
         _wrapper& operator=(const _wrapper& o) = default;
 
         _wrapper& operator=(_wrapper&& o) noexcept = default;
+
+        // Comparison operators for std::variant compatibility
+        bool operator<(const _wrapper& other) const {
+            return static_cast<const T&>(*this) < static_cast<const T&>(other);
+        }
+
+        bool operator==(const _wrapper& other) const {
+            return static_cast<const T&>(*this) == static_cast<const T&>(other);
+        }
+
+        bool operator!=(const _wrapper& other) const {
+            return static_cast<const T&>(*this) != static_cast<const T&>(other);
+        }
     };
 
     /// TODO: Do we need Signature?
@@ -88,6 +101,19 @@ namespace ipcgull {
     struct _y_comb : K<_y_comb<K>> {
     public:
         using K<_y_comb>::K;
+
+        // Comparison operators for std::variant compatibility
+        bool operator<(const _y_comb& other) const {
+            return static_cast<const K<_y_comb>&>(*this) < static_cast<const K<_y_comb>&>(other);
+        }
+
+        bool operator==(const _y_comb& other) const {
+            return static_cast<const K<_y_comb>&>(*this) == static_cast<const K<_y_comb>&>(other);
+        }
+
+        bool operator!=(const _y_comb& other) const {
+            return static_cast<const K<_y_comb>&>(*this) != static_cast<const K<_y_comb>&>(other);
+        }
     };
 
     typedef _y_comb<_variant> variant;
