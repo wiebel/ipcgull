@@ -24,6 +24,8 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <algorithm>
+#include <map>
 #include <variant>
 #include <vector>
 
@@ -118,6 +120,20 @@ namespace ipcgull {
 
     typedef _y_comb<_variant> variant;
     typedef _wrapper<std::vector<variant>, 0> variant_tuple;
+
+    // Comparison operators for containers with variant types
+    // Required for std::variant to work with these types
+    inline bool operator<(const std::vector<variant>& lhs, const std::vector<variant>& rhs) {
+        return std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
+    }
+
+    // Note: std::map already has operator< when key_type and mapped_type are comparable
+    // We provide an explicit declaration for ADL to work with std::variant
+    inline bool operator<(const std::map<variant, variant>& lhs, const std::map<variant, variant>& rhs) {
+        // std::map's operator< is defined in <map> header and works when value_type is comparable
+        if (lhs.size() != rhs.size()) return lhs.size() < rhs.size();
+        return std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
+    }
 
     template<typename A, typename B>
     struct and_type : and_type<typename A::type, B> {

@@ -611,19 +611,21 @@ struct server::internal {
         info->ref_count = 1;
         info->name = g_strdup(name.c_str());
         info->annotations = nullptr;
+        if (!type.valid()) {
+            throw std::runtime_error("bad ipcgull::variant_type: invalid variant_type for argument '" + name + "'");
+        }
         try {
             const GVariantType* g_type;
-            try {
-                g_type = std::any_cast<GVariantType*>(type.raw_data());
-            } catch (std::bad_any_cast& e) {
-                g_type = std::any_cast<const GVariantType*>(type.raw_data());
-            }
+            // Use const_g_type which handles both GVariantType* and const GVariantType*
+            g_type = const_g_type(type.raw_data());
             if (!g_type)
-                throw std::runtime_error("null ipcgull::variant_type");
+                throw std::runtime_error("null ipcgull::variant_type for argument '" + name + "'");
             info->signature = g_variant_type_dup_string(g_type);
             assert(info->signature);
+        } catch (std::runtime_error& e) {
+            throw;
         } catch (std::bad_any_cast& e) {
-            throw std::runtime_error("bad ipcgull::variant_type");
+            throw std::runtime_error("bad ipcgull::variant_type for argument '" + name + "': bad_any_cast (unexpected)");
         }
 
         return info;
@@ -638,8 +640,13 @@ struct server::internal {
         auto* g_args = g_new(GDBusArgInfo*, size + 1);
         assert(g_args);
         g_args[size] = nullptr;
-        for (std::size_t i = 0; i < size; ++i)
-            g_args[i] = arg_info(names[i], types[i]);
+        for (std::size_t i = 0; i < size; ++i) {
+            try {
+                g_args[i] = arg_info(names[i], types[i]);
+            } catch (std::runtime_error& e) {
+                throw std::runtime_error(std::string(e.what()) + " (index " + std::to_string(i) + ", names.size()=" + std::to_string(names.size()) + ", types.size()=" + std::to_string(types.size()) + ")");
+            }
+        }
 
         return g_args;
     }
@@ -673,20 +680,21 @@ struct server::internal {
                 flags |= G_DBUS_PROPERTY_INFO_FLAGS_WRITABLE;
             info->flags = static_cast<GDBusPropertyInfoFlags>(flags);
         }
+        if (!p.type().valid()) {
+            throw std::runtime_error("bad ipcgull::variant_type: invalid variant_type for property '" + name + "'");
+        }
         try {
             const GVariantType* g_type;
-            try {
-                g_type = std::any_cast<GVariantType*>(p.type().raw_data());
-            } catch (std::bad_any_cast& e) {
-                g_type = std::any_cast<const GVariantType*>(
-                        p.type().raw_data());
-            }
+            // Use const_g_type which handles both GVariantType* and const GVariantType*
+            g_type = const_g_type(p.type().raw_data());
             if (!g_type)
-                throw std::runtime_error("null ipcgull::variant_type");
+                throw std::runtime_error("null ipcgull::variant_type for property '" + name + "'");
             info->signature = g_variant_type_dup_string(g_type);
             assert(info->signature);
+        } catch (std::runtime_error& e) {
+            throw;
         } catch (std::bad_any_cast& e) {
-            throw std::runtime_error("bad ipcgull::variant_type");
+            throw std::runtime_error("bad ipcgull::variant_type for property '" + name + "': bad_any_cast");
         }
 
         return info;

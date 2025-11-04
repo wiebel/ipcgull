@@ -61,7 +61,7 @@ variant_type::variant_type(const std::type_info& primitive) {
         type = G_VARIANT_TYPE_INT16;
     else if (primitive == typeid(uint16_t))
         type = G_VARIANT_TYPE_UINT16;
-    else if (primitive == typeid(int32_t))
+    else if (primitive == typeid(int32_t) || primitive == typeid(int))
         type = G_VARIANT_TYPE_INT32;
     else if (primitive == typeid(uint32_t))
         type = G_VARIANT_TYPE_UINT32;
@@ -82,14 +82,22 @@ variant_type::variant_type(const std::type_info& primitive) {
     else if (primitive == typeid(bool))
         type = G_VARIANT_TYPE_BOOLEAN;
     else
-        throw std::runtime_error("Invalid GVariant type");
+        throw std::runtime_error("Invalid GVariant type: " + std::string(primitive.name()));
     data = g_type_to_any(g_variant_type_copy(type));
 }
 
 [[maybe_unused]]
 variant_type variant_type::vector(const variant_type& t) {
+    if (!t.valid()) {
+        throw std::runtime_error("bad ipcgull::variant_type: invalid variant_type for vector element");
+    }
     variant_type vec{};
-    auto gvar = const_g_type(t.data);
+    const GVariantType* gvar;
+    try {
+        gvar = const_g_type(t.data);
+    } catch (std::bad_any_cast& e) {
+        throw std::runtime_error("bad ipcgull::variant_type: bad_any_cast when creating vector variant_type from element type");
+    }
     assert(gvar);
     vec.data = g_type_to_any(g_variant_type_new_array(gvar));
 
@@ -98,8 +106,16 @@ variant_type variant_type::vector(const variant_type& t) {
 
 [[maybe_unused]]
 variant_type variant_type::vector(variant_type&& t) {
+    if (!t.valid()) {
+        throw std::runtime_error("bad ipcgull::variant_type: invalid variant_type for vector element");
+    }
     variant_type vec{};
-    auto gvar = const_g_type(t.data);
+    const GVariantType* gvar;
+    try {
+        gvar = const_g_type(t.data);
+    } catch (std::bad_any_cast& e) {
+        throw std::runtime_error("bad ipcgull::variant_type: bad_any_cast when creating vector variant_type from element type");
+    }
     assert(gvar);
     vec.data = g_type_to_any(g_variant_type_new_array(gvar));
     t = {};
@@ -140,12 +156,21 @@ variant_type variant_type::tuple(const std::vector<variant_type>& types) {
     const std::unique_ptr<const GVariantType* []> g_types(
             new const GVariantType* [types.size()]);
     for (std::size_t i = 0; i < types.size(); ++i) {
-        auto gvar = const_g_type(types[i].data);
+        if (!types[i].valid()) {
+            throw std::runtime_error("bad ipcgull::variant_type: invalid variant_type in tuple at index " + std::to_string(i));
+        }
+        const GVariantType* gvar;
+        try {
+            gvar = const_g_type(types[i].data);
+        } catch (std::bad_any_cast& e) {
+            throw std::runtime_error("bad ipcgull::variant_type: bad_any_cast when creating tuple variant_type at index " + std::to_string(i) + " (data.type()=" + std::string(types[i].raw_data().type().name()) + ")");
+        }
         assert(gvar);
         g_types[i] = gvar;
     }
     variant_type type{};
-    type.data = g_type_to_any(g_variant_type_new_tuple(g_types.get(), size));
+    GVariantType* tuple_type = g_variant_type_new_tuple(g_types.get(), size);
+    type.data = g_type_to_any(tuple_type);
     return type;
 }
 
@@ -155,6 +180,9 @@ variant_type variant_type::tuple(std::vector<variant_type>&& types) {
     const std::unique_ptr<const GVariantType* []> g_types(
             new const GVariantType* [types.size()]);
     for (std::size_t i = 0; i < types.size(); ++i) {
+        if (!types[i].valid()) {
+            throw std::runtime_error("bad ipcgull::variant_type: invalid variant_type in tuple at index " + std::to_string(i));
+        }
         auto gvar = const_g_type(types[i].data);
         assert(gvar);
         g_types[i] = gvar;
@@ -213,8 +241,13 @@ bool variant_type::operator==(const variant_type& o) const {
 [[maybe_unused]] [[nodiscard]]
 bool variant_type::valid() const {
     if ((data.type() == typeid(const GVariantType*)) ||
-        (data.type() == typeid(GVariantType*)))
-        return const_g_type(data);
+        (data.type() == typeid(GVariantType*))) {
+        try {
+            return const_g_type(data) != nullptr;
+        } catch (std::bad_any_cast&) {
+            return false;
+        }
+    }
     return false;
 }
 
